@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Tenis JS</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body onkeydown="togglePause(event)">
+	<canvas id="tenis" width="600" height="400"></canvas>
+	<button id="btn" onclick="pocniIgru(), brisi()">Pocni</button>
+	<div id="runde"></div>
+	<div>
+		<br/>
+		<br/>
+		<div>UPUTSTVA ZA IGRU TENIS BY MARKO PEYKOVICH:</div><br/>
+		<div>1. Kompjuter ima reket na levoj strani teniskog polja, a ti reket na desnoj strani.</div><br/>
+		<div>2. Kako bi pokrenuo prvu rundu, klikni na desno dugme "Pocni".</div>
+		<div>3. Pritisni taster p ako zelis pauzu, pritisni taster p nakon svakog poena (cime se pokrece<br/> 
+		automatski servis sa pola terena) i pritisni taster p posle alerta za pocetak nove runde<br/>
+		kada bilo koji igrac osvoji 11 poena. Ako uradis refresh stranice, ponovo ce se pojaviti dugme<br/>
+		"Pocni", pritiskom na koje se ponovo pokrece prva runda.</div></br>
+		<div>4. Ko od igraca ne vrati automatski servis, poen dobija njegov protivnik.</div><br/>
+		<div>5. Za pokretanje reketa koristi tastere strelica na tastaturi. Mozes ih<br/> 
+		koristiti za brza pomeranja reketa tako sto ces tastere strelica drzati bez<br/>
+		otpustanja (keypress) ili za sporija i kraca pomeranja tako sto ces</br> 
+		ih naizmenicno pritiskati i otpustati (keydown/keyup). Za dijagonalna kretanja</br> 
+		napred i nazad pritiskaj simultano dva tastera strelica (npr. taster leve i taster gornje strelice,</br>
+		taster desne i donje...)</div><br/>
+		<div>6. Ako se loptica "zaglavi" uz donju i gornju liniju polja, borba za poen ce se</br>
+		odmah ili ubrzo nakon toga automatski resetovati.</div>
+	</div>
+	
+<script>
+
+	var cnvs = document.getElementById("tenis");
+	var ctx = cnvs.getContext("2d");
+	
+	var keys = {};
+	var paused = false;
+	var btn = document.getElementById("btn");
+	var brojRundi = 0;
+	
+	function brisi() {
+		btn.setAttribute("hidden",true);
+	}
+	
+	function numberRounds() {
+		var r = document.getElementById("runde");
+		r.innerHTML = "Runda broj: "+brojRundi;
+	}
+	
+	window.addEventListener('keydown', function (e) {
+            keys[e.keyCode] = true;
+			if([37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+				e.preventDefault();
+			}
+		});
+		
+	window.addEventListener('keyup', function (e) {
+            keys[e.keyCode] = false; 
+        })
+	
+	
+	var comp = {
+		x: 0,
+		y: cnvs.height/2 - 100/2,
+		width: 10,
+		height: 70,
+		color: "WHITE",
+		score: 0
+	}
+	
+	var user = {
+		x: cnvs.width-10,
+		y: cnvs.height/2 - 100/2,
+		width: 10,
+		height: 70,
+		color: "WHITE",
+		score: 0
+	}
+	
+	var ball = {
+		x: cnvs.width/2,
+		y: cnvs.height/2,
+		radius: 10,
+		speed: Math.random()*4+1,
+		velocityX: -5,
+		velocityY: 5,
+		color: "WHITE"
+	}
+	
+	function drawRect(x,y,w,h,color) {
+		ctx.fillStyle = color;
+		ctx.fillRect(x,y,w,h);
+	}
+	
+	function cancelRect() {
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+	}
+	
+	var net = {
+		x: cnvs.width/2-1,
+		y: 0,
+		width: 2,
+		height: 10,
+		color: "WHITE"
+	}
+	
+	function drawNet() {
+		for(var i = 0; i<=cnvs.height; i+=15) {
+			drawRect(net.x,net.y+i,net.width,net.height,net.color);
+		}
+	}
+	
+	function drawCircle(x,y,r,color) {
+		ctx.fillStyle = color;
+		ctx.beginPath();
+		ctx.arc(x,y,r,Math.PI*2,false);
+		ctx.closePath();
+		ctx.fill();
+	}
+	
+	function drawText(text,x,y,color) {
+		ctx.fillStyle = color;
+		ctx.font = "45px Times New Roman"
+		ctx.fillText(text,x,y);
+	}
+	
+	function render() {
+		drawRect(0,0,cnvs.width,cnvs.height,"BLACK");
+		
+		drawNet();
+		
+		drawText(comp.score,cnvs.width/4,cnvs.height/5,"WHITE");
+		drawText(user.score,3*cnvs.width/4,cnvs.height/5,"WHITE");
+		
+		drawRect(user.x,user.y,user.width,user.height,user.color);
+		drawRect(comp.x,comp.y,comp.width,comp.height,comp.color);
+		
+		drawCircle(ball.x,ball.y,ball.radius,ball.color);
+		numberRounds();
+	}
+	
+	function collision(b,p) {
+		b.top = b.y - b.radius;
+		b.bottom = b.y + b.radius;
+		b.left = b.x - b.radius;
+		b.right = b.x + b.radius;
+		
+		p.top = p.y;
+		p.bottom = p.y + p.height;
+		p.left = p.x;
+		p.right = p.x + p.width;
+		
+		return b.right > p.left && b.bottom > p.top && b.left < p.right && b.top < p.bottom;
+	}
+	
+	function resetBall() {
+		ball.x = cnvs.width/2;
+		ball.y = cnvs.height/2;
+		
+		ball.speed = Math.random()*4+1;
+		ball.velocityX = -ball.velocityX;
+	}
+	
+	function update() {
+		
+		if(keys && keys[37]) {user.x += -5;}
+		if(keys && keys[39]) {user.x += 5;}
+		if(keys && keys[38]) {user.y -= 5;}
+		if(keys && keys[40]) {user.y += 5;}
+		
+		ball.x += ball.velocityX;
+		ball.y += ball.velocityY;
+		
+		var computerLevel = 0.11;
+		
+		comp.y += (ball.y - (comp.y + comp.height/2))*computerLevel;
+		comp.x += (Math.random()*6.2)-3;
+		
+		if(comp.x < 0) {
+			comp.x = 0;
+		}
+		if(comp.x > cnvs.width/2) {
+			comp.x = cnvs.width/5;
+		}
+		if(comp.y + comp.height > cnvs.height) {
+			comp.y = cnvs.height - comp.height;
+		}
+		if(comp.y < 0) {
+			comp.y = 0;
+		}
+		if(user.x > cnvs.width-10) {
+			user.x = cnvs.width-10;
+		}
+		if(user.x < cnvs.width/2) {
+			user.x = cnvs.width/2;
+		}
+		if(user.y + user.height > cnvs.height) {
+			user.y = cnvs.height - user.height;
+		}
+		if(user.y < 0) {
+			user.y = 0;
+		}
+		
+		if(ball.y > cnvs.height || ball.y + ball.radius < 0) {
+			resetBall();
+			comp.x = 0;
+			comp.y = cnvs.height/2 - 100/2;
+			user.x = cnvs.width-10;
+			user.y = cnvs.height/2 - 100/2;
+			paused = !paused;
+		}
+		
+		if(ball.y + ball.radius > cnvs.height || ball.y - ball.radius < 0) {
+			ball.velocityY = -ball.velocityY;
+		}
+		
+		var player = (ball.x < cnvs.width/2) ? comp : user;
+		
+		if(collision(ball,player)) {
+			
+			var collidePoint = ball.y - (player.y + player.height/2);
+			
+			collidePoint = collidePoint/(player.height/2);
+			
+			var angleRad = collidePoint*(Math.PI/4);
+			
+			var direction = (ball.x > cnvs.width/2) ? -1 : 1;
+			
+			ball.velocityX = direction * ball.speed*Math.cos(angleRad);
+			ball.velocityY = ball.speed*Math.sin(angleRad);
+			
+			ball.speed = Math.random()*5 + 4; 
+		}
+		
+		if(ball.x + ball.radius > cnvs.width) {
+			comp.score++;
+			resetBall();
+			comp.x = 0;
+			comp.y = cnvs.height/2 - 100/2;
+			user.x = cnvs.width-10;
+			user.y = cnvs.height/2 - 100/2;
+			paused = !paused;
+		}else if(ball.x - ball.radius < 0) {
+			user.score++;
+			resetBall();
+			comp.x = 0;
+			comp.y = cnvs.height/2 - 100/2;
+			user.x = cnvs.width-10;
+			user.y = cnvs.height/2 - 100/2;
+			paused = !paused;
+		}
+	}
+	
+	function togglePause(e) {
+		if(e.keyCode == 80) {
+			paused = !paused;
+		}
+	}
+	
+	function game() {
+		if(!paused) {
+			update();
+		}
+		if(user.score == 11) {
+			alert("Vi ste pobedili. Potvrdi ovde i pritisni potom taster p da pocnes novu rundu.");
+			comp.score = 0;
+			user.score = 0;
+			brojRundi++;
+			numberRounds();
+		}
+		
+		if(comp.score == 11) {
+			alert("Kompjuter je pobedio. Potvrdi ovde i pritisni potom taster p da pocnes novu rundu.");
+			comp.score = 0;
+			user.score = 0;
+			brojRundi++;
+			numberRounds();
+		}
+		render();
+	}
+	
+	render();
+	
+	function pocniIgru() {
+		var framePerSecond = 50;
+		setInterval(game,1000/framePerSecond);
+	}
+	
+</script>
+
+</body>
+</html>
